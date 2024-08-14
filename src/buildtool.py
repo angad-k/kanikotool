@@ -4,16 +4,18 @@ from os.path import relpath
 class BuildTool:
     project_path: str
     dockerfile_path: str
-    dockerfile_relpath: str
+
     def __init__(self, project_path:str, dockerfile_path: str):
         self.project_path = project_path
-        self.dockerfile_path = dockerfile_path
-        self.dockerfile_relpath = relpath(dockerfile_path, project_path)
+        self.dockerfile_path = relpath(dockerfile_path, project_path)
 
-    def submit_job(self):
+    def submit_job(self, username, username_plain, password, image_name):
         kube_util = KubeUtil()
-        kube_util.create_volume(path=self.project_path)
-        kube_util.create_volume_claim()
-        kube_util.create_pod()
-        kube_util.cleanup()
-        pass
+        try:
+            kube_util.create_secret(username=username, password=password)
+            kube_util.create_volume(path=self.project_path)
+            kube_util.create_volume_claim()
+            kube_util.create_pod(dockerfile_path=self.dockerfile_path, username_plain=username_plain, image_name=image_name)
+        finally:
+            pass
+            # kube_util.cleanup()
