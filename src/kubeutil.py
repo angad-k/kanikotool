@@ -6,7 +6,8 @@ class KubeUtil:
     v1 : client.CoreV1Api
     volume_name: str = "kt-target-project-volume"
     volume_claim_name: str = "kt-target-project-volume-claim"
-    namespace: str = "kaniko-build-tool"
+    # namespace: str = "kaniko-build-tool"
+    namespace: str = "default"
     secret_name: str = "kaniko-build-tool-secret"
     pod_name: str = "kaniko"
     
@@ -14,12 +15,12 @@ class KubeUtil:
         config.load_kube_config()
         self.v1 = client.CoreV1Api()
         self.cleanup()
-        try:
-            self.v1.create_namespace(client.V1Namespace(metadata=client.V1ObjectMeta(name=self.namespace)))
-        except:
-            click.echo("ERROR: Couldn't create namespace. If you ran the tool recently, please wait a few moments and try again.", 
-                       err=True)
-            os._exit(status=1)
+        # try:
+        #     self.v1.create_namespace(client.V1Namespace(metadata=client.V1ObjectMeta(name=self.namespace)))
+        # except:
+        #     click.echo("ERROR: Couldn't create namespace. If you ran the tool recently, please wait a few moments and try again.", 
+        #                err=True)
+        #     os._exit(status=1)
     
     def create_secret(self, username, password):
         api_version = "v1"
@@ -38,11 +39,37 @@ class KubeUtil:
         api_version = "v1"
         kind = "PersistentVolume"
         metadata = client.V1ObjectMeta(name=self.volume_name, labels={"type": "local"})
+        # spec = client.V1PersistentVolumeSpec(
+        #     capacity={"storage": "5Gi"}, 
+        #     access_modes=["ReadWriteOnce"], 
+        #     storage_class_name="local-storage",
+        #     volume_mode="Filesystem",
+        #     local={
+        #         "path": path
+        #     },
+        #     node_affinity={
+        #         "required": {
+        #             "nodeSelectorTerms": [
+        #                 {
+        #                     "matchExpressions": [
+        #                         {
+        #                             "key": "kubernetes.io/hostname",
+        #                             "operator": "In",
+        #                             "values": ["minikube"]
+        #                         }
+        #                     ]
+        #                 }
+        #             ]
+        #         }
+        #     })
+
         spec = client.V1PersistentVolumeSpec(
             capacity={"storage": "5Gi"}, 
             access_modes=["ReadWriteOnce"], 
-            storage_class_name="local-storage",
-            host_path={"path": path})
+            storage_class_name="manual",
+            host_path={
+                "path": path
+            })
         pv_body = client.V1PersistentVolume(api_version=api_version, kind=kind, metadata=metadata, spec=spec)
         self.v1.create_persistent_volume(body=pv_body)
         click.echo("Created a volume.")
@@ -51,10 +78,14 @@ class KubeUtil:
         api_version = "v1"
         kind = "PersistentVolumeClaim"
         metadata = client.V1ObjectMeta(name=self.volume_claim_name)
+        # spec = client.V1PersistentVolumeClaimSpec( 
+        #     access_modes=["ReadWriteOnce"],
+        #     resources={"requests": {"storage": "5Gi"}},
+        #     storage_class_name="local-storage")
         spec = client.V1PersistentVolumeClaimSpec( 
             access_modes=["ReadWriteOnce"],
             resources={"requests": {"storage": "5Gi"}},
-            storage_class_name="local-storage")
+            storage_class_name="manual")
         pvc_body = client.V1PersistentVolumeClaim(api_version=api_version, kind=kind, metadata=metadata, spec=spec)
         self.v1.create_namespaced_persistent_volume_claim(namespace=self.namespace, body=pvc_body)
         click.echo("Created a volume claim.")
@@ -67,7 +98,7 @@ class KubeUtil:
             containers=[{
                 "name": "kaniko",
                 "image": "gcr.io/kaniko-project/executor:latest",
-                "args": ["--dockerfile=/workspace/Dockerfile", #TODO: dockerfile could be anywhere
+                "args": ["--dockerfile=/workspace/dockerfile", #TODO: dockerfile could be anywhere
                          "--context=dir://workspace", 
                          "--destination=" + username_plain + "/" + image_name],
                 "volumeMounts": [
@@ -105,7 +136,8 @@ class KubeUtil:
 
 
     def cleanup(self):
-        self.clear_namespace()
+        # self.clear_namespace()
+        self.v1.delete_namespaced_secret(self.secret_name, self.namespace)
         self.clear_volume_and_volume_claims()
         click.echo("Completed cleanup, safe to exit.")
     
