@@ -13,7 +13,8 @@ def cli():
 @click.option('--project', default=".", help="Path to the Project. Please make sure the Dockerfile is inside this.")
 @click.option('--imagename', required="true", help="Name of the image that will be uploaded to Dockerhub.")
 def deploy(dockerfile, project, imagename):
-    project_path = abspath(project)
+    # project_path = abspath(project)
+    project_path = project
     dockerfile_path = abspath(dockerfile)
     print(project, project_path, normpath(project_path))
     click.echo(f"Project directory: {project_path}")
@@ -24,11 +25,11 @@ def deploy(dockerfile, project, imagename):
         click.echo(f"No file found at path: {dockerfile_path}")
 
     username = click.prompt("Please enter your Dockerhub username")
-    username_encoded = base64.b64encode(username.encode()).decode()
     password = click.prompt("Please enter your Dockerhub password", hide_input=True)
-    password_encoded = base64.b64encode(password.encode()).decode()
+    auth_string = base64.b64encode((username + ":" + password).encode()).decode()
+    print(auth_string)
     buildtool = BuildTool(project_path=project_path, dockerfile_path=dockerfile_path)
-    buildtool.submit_job(username=username_encoded, username_plain = username, password=password_encoded, image_name=imagename)
+    buildtool.submit_job(username_plain = username, auth_string=auth_string, image_name=imagename)
 
 cli.add_command(deploy)
 

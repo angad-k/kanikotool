@@ -1,6 +1,7 @@
 import click
 import os
 from kubernetes import client, config
+import base64
 
 class KubeUtil:
     v1 : client.CoreV1Api
@@ -14,7 +15,7 @@ class KubeUtil:
     def __init__(self):
         config.load_kube_config()
         self.v1 = client.CoreV1Api()
-        self.cleanup()
+        # self.cleanup()
         # try:
         #     self.v1.create_namespace(client.V1Namespace(metadata=client.V1ObjectMeta(name=self.namespace)))
         # except:
@@ -22,11 +23,14 @@ class KubeUtil:
         #                err=True)
         #     os._exit(status=1)
     
-    def create_secret(self, username, password):
+    def create_secret(self, auth_string):
         api_version = "v1"
         metadata = client.V1ObjectMeta(name=self.secret_name)
-        type = "docker-registry"
-        data = {"username": username, "password": password}
+        # type = "docker-registry"kubernetes.io/dockerconfigjson
+        type = "generic"
+        b64data = '{"auths": {"https://index.docker.io/v1/": {"auth": "'+ auth_string + '"}}}'
+        b64data=base64.b64encode(b64data.encode()).decode()
+        data = {'config.json': b64data}
         secret_body = client.V1Secret(
             api_version=api_version, 
             metadata=metadata, 
@@ -66,7 +70,7 @@ class KubeUtil:
         spec = client.V1PersistentVolumeSpec(
             capacity={"storage": "5Gi"}, 
             access_modes=["ReadWriteOnce"], 
-            storage_class_name="manual",
+            storage_class_name="local-storage",
             host_path={
                 "path": path
             })
@@ -78,19 +82,15 @@ class KubeUtil:
         api_version = "v1"
         kind = "PersistentVolumeClaim"
         metadata = client.V1ObjectMeta(name=self.volume_claim_name)
-        # spec = client.V1PersistentVolumeClaimSpec( 
-        #     access_modes=["ReadWriteOnce"],
-        #     resources={"requests": {"storage": "5Gi"}},
-        #     storage_class_name="local-storage")
         spec = client.V1PersistentVolumeClaimSpec( 
             access_modes=["ReadWriteOnce"],
             resources={"requests": {"storage": "5Gi"}},
-            storage_class_name="manual")
+            storage_class_name="local-storage")
         pvc_body = client.V1PersistentVolumeClaim(api_version=api_version, kind=kind, metadata=metadata, spec=spec)
         self.v1.create_namespaced_persistent_volume_claim(namespace=self.namespace, body=pvc_body)
         click.echo("Created a volume claim.")
 
-    def create_pod(self, dockerfile_path, username_plain, image_name):
+    def create_pod(self, dockerfile_path, username_plain, image_name, project_path):
         api_version = "v1"
         kind = "Pod"
         metadata = client.V1ObjectMeta(name=self.pod_name)
@@ -104,27 +104,36 @@ class KubeUtil:
                 "volumeMounts": [
                     {
                         "name": self.secret_name,
-                        "mountPath": "/kaniko/.docker"
+                        "mountPath": "/kaniko/.docker/config.json",
+                        "subPath": "config.json"
                     },
                     {
                         "name": self.volume_name,
                         "mountPath": "/workspace"
                     }
                 ]
-
             }],
+            security_context={"privileged": True},
             restart_policy="Never",
             volumes=[
                 {
                     "name": self.secret_name,
                     "secret": {
-                        "secretName": self.secret_name
+                        "secretName": self.secret_name,
+                        "items": [{
+                             "key": "config.json",
+                             "path": "config.json"
+                        }]
                     }
                 },
                 {
                     "name": self.volume_name,
                     "persistentVolumeClaim":{"claimName": self.volume_claim_name}
                 }
+                # {
+                #     "name": self.volume_name,
+                #     "hostPath":{"path": project_path}
+                # }
             ]
         )
         pod_body = client.V1Pod(api_version=api_version, 
@@ -132,13 +141,26 @@ class KubeUtil:
                                 metadata=metadata,
                                 spec=spec)
         self.v1.create_namespaced_pod(namespace=self.namespace, body=pod_body)
+        click.echo("Pod created")
         
-
+# items:
+#           - key: .dockerconfigjson
+#             path: config.json
 
     def cleanup(self):
         # self.clear_namespace()
-        self.v1.delete_namespaced_secret(self.secret_name, self.namespace)
+        try:
+            self.v1.delete_namespaced_secret(self.secret_name, self.namespace)
+        except:
+            click.echo("No secrets deleted, proceeding.")
+        
+        try:
+            self.v1.delete_namespaced_pod(self.pod_name, self.namespace)
+        except:
+            click.echo("No pods deleted, proceeding.")
+
         self.clear_volume_and_volume_claims()
+
         click.echo("Completed cleanup, safe to exit.")
     
     def clear_volume_and_volume_claims(self):
