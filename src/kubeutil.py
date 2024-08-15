@@ -22,7 +22,19 @@ class KubeUtil:
         #     click.echo("ERROR: Couldn't create namespace. If you ran the tool recently, please wait a few moments and try again.", 
         #                err=True)
         #     os._exit(status=1)
-    
+
+    def get_pod_status(self):
+        pod_list = self.v1.list_namespaced_pod(namespace=self.namespace).items
+        for pod in pod_list:
+            if(pod.metadata.name == self.pod_name):
+                return pod.status.phase
+        return None
+
+    def get_logs(self):
+        logs = self.v1.read_namespaced_pod_log(name = self.pod_name, namespace=self.namespace)
+        click.echo("Logs: ")
+        click.echo(logs)
+
     def create_secret(self, auth_string):
         api_version = "v1"
         metadata = client.V1ObjectMeta(name=self.secret_name)
