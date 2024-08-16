@@ -1,6 +1,6 @@
 from src.kubeutil import KubeUtil
-from os.path import relpath
-from os import _exit
+from os.path import isdir, join, relpath
+from os import _exit, walk
 import click
 import time
 from subprocess import Popen, PIPE
@@ -10,7 +10,8 @@ from queue import Queue, Empty
 
 class BuildTool:
     project_path: str
-    # mount_proces
+    dockerfile_path: str
+    mount_process: Popen
 
     # REF: https://stackoverflow.com/questions/375427/a-non-blocking-read-on-a-subprocess-pipe-in-python
     def enqueue_output(self, out, queue):
@@ -20,8 +21,18 @@ class BuildTool:
 
     def __init__(self, project_path:str):
         self.project_path = project_path
-
-        #TO DO: find dockerfile
+        
+        if(not isdir(project_path)):
+            click.echo("ERROR: Project path is not a directory, please check input and try again.")
+            _exit()
+        for cur_path, _, files in walk(project_path):
+            if "dockerfile" in files:
+                self.dockerfile_path = join(cur_path, "dockerfile")
+            elif "Dockerfile" in files:
+                self.dockerfile_path = join(cur_path, "Dockerfile")
+        self.dockerfile_path = relpath(self.dockerfile_path, project_path)
+        self.dockerfile_path = self.dockerfile_path.replace("\\", "/")
+        click.echo(f"Dockerfile found at path {self.dockerfile_path}")
         
         mounted = self.mount_directory()
         if(not mounted):
@@ -31,7 +42,8 @@ class BuildTool:
             print("Error in mounting project directory, please try again.")
             _exit(status=1)
 
-    # I know this is bad, didn't find an alternative though. Minikube doesn't have an SDK and I had a lot of adventures with mounting volumes :/        
+    # I know running a command from here is bad, didn't find an alternative though. 
+    # Minikube doesn't have an SDK and I had a lot of adventures with mounting volumes :/        
     def mount_directory(self) -> bool:
         self.mount_process = Popen(['minikube', 'mount', self.project_path + ":/kanikotool"], stdout=PIPE, bufsize=1,universal_newlines=True, encoding="utf-8")
         q = Queue()
@@ -44,7 +56,6 @@ class BuildTool:
         start = time.time()
 
         while(True):
-            # print(time.time()-start)
             if(time.time()-start > TIME_OUT):
                 self.mount_process.terminate()
                 return False
@@ -53,7 +64,7 @@ class BuildTool:
                 print("Error in mounting project directory, please try again.")
                 return False
             
-            try:  line = q.get_nowait() # or q.get(timeout=.1)
+            try:  line = q.get_nowait()
             except Empty:
                 pass
             else:
@@ -68,7 +79,7 @@ class BuildTool:
             kube_util.create_secret(auth_string = auth_string)
             kube_util.create_volume(path="/kanikotool")
             kube_util.create_volume_claim()
-            kube_util.create_pod(username_plain=username_plain, image_name=image_name)
+            kube_util.create_pod(username_plain=username_plain, image_name=image_name, dockerfile_path = self.dockerfile_path)
             status = "Pending"
             while(status == "Pending" or status == "Running"):
                 status = kube_util.get_pod_status()

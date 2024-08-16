@@ -1,5 +1,4 @@
 import click
-import os
 from kubernetes import client, config
 import base64
 
@@ -7,7 +6,6 @@ class KubeUtil:
     v1 : client.CoreV1Api
     volume_name: str = "kt-target-project-volume"
     volume_claim_name: str = "kt-target-project-volume-claim"
-    # namespace: str = "kaniko-build-tool"
     namespace: str = "default"
     secret_name: str = "kaniko-build-tool-secret"
     pod_name: str = "kaniko"
@@ -71,7 +69,7 @@ class KubeUtil:
         self.v1.create_namespaced_persistent_volume_claim(namespace=self.namespace, body=pvc_body)
         click.echo("Created a volume claim.")
 
-    def create_pod(self, username_plain, image_name):
+    def create_pod(self, username_plain, image_name, dockerfile_path):
         api_version = "v1"
         kind = "Pod"
         metadata = client.V1ObjectMeta(name=self.pod_name)
@@ -79,7 +77,7 @@ class KubeUtil:
             containers=[{
                 "name": "kaniko",
                 "image": "gcr.io/kaniko-project/executor:latest",
-                "args": ["--dockerfile=/workspace/dockerfile", #TODO: dockerfile could be anywhere
+                "args": ["--dockerfile=/workspace/" + dockerfile_path, #TODO: dockerfile could be anywhere
                          "--context=dir://workspace", 
                          "--destination=" + username_plain + "/" + image_name],
                 "volumeMounts": [

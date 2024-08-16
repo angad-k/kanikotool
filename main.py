@@ -1,6 +1,5 @@
 import click
 import base64
-from os.path import isfile, abspath, normpath
 from src.buildtool import BuildTool
 import base64
 
@@ -9,7 +8,7 @@ def cli():
     pass
 
 @click.command()
-@click.option('--project', default=".", help="Path to the Project. Please make sure the Dockerfile is at the root of the directory.")
+@click.option('--project', default=".", help="Path to the Project. Please make sure the Dockerfile is somewhere inside the directory.")
 @click.option('--imagename', required="true", help="Name of the image that will be uploaded to Dockerhub.")
 def deploy(project, imagename):
     project_path = project
@@ -26,5 +25,4 @@ def deploy(project, imagename):
 cli.add_command(deploy)
 
 if __name__ == "__main__":
-    # app()
     cli()
