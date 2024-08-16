@@ -25,14 +25,14 @@ class BuildTool:
         if(not isdir(project_path)):
             click.echo("ERROR: Project path is not a directory, please check input and try again.")
             _exit(status=1)
+        self.dockerfile_path = None
         for cur_path, _, files in walk(project_path):
             if "dockerfile" in files:
                 self.dockerfile_path = join(cur_path, "dockerfile")
             elif "Dockerfile" in files:
                 self.dockerfile_path = join(cur_path, "Dockerfile")
-            else:
-                click.echo("Dockerfile not found. Please check and try again.")
-                _exit(status=1)
+        if(self.dockerfile_path is None):
+            click.echo("ERROR: Dockerfile not found, please check and try again.")
         self.dockerfile_path = relpath(self.dockerfile_path, project_path)
         self.dockerfile_path = self.dockerfile_path.replace("\\", "/")
         click.echo(f"Dockerfile found at path {self.dockerfile_path}")
