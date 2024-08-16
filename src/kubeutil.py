@@ -15,13 +15,6 @@ class KubeUtil:
     def __init__(self):
         config.load_kube_config()
         self.v1 = client.CoreV1Api()
-        # self.cleanup()
-        # try:
-        #     self.v1.create_namespace(client.V1Namespace(metadata=client.V1ObjectMeta(name=self.namespace)))
-        # except:
-        #     click.echo("ERROR: Couldn't create namespace. If you ran the tool recently, please wait a few moments and try again.", 
-        #                err=True)
-        #     os._exit(status=1)
 
     def get_pod_status(self):
         pod_list = self.v1.list_namespaced_pod(namespace=self.namespace).items
@@ -38,7 +31,6 @@ class KubeUtil:
     def create_secret(self, auth_string):
         api_version = "v1"
         metadata = client.V1ObjectMeta(name=self.secret_name)
-        # type = "docker-registry"kubernetes.io/dockerconfigjson
         type = "generic"
         b64data = '{"auths": {"https://index.docker.io/v1/": {"auth": "'+ auth_string + '"}}}'
         b64data=base64.b64encode(b64data.encode()).decode()
@@ -55,29 +47,6 @@ class KubeUtil:
         api_version = "v1"
         kind = "PersistentVolume"
         metadata = client.V1ObjectMeta(name=self.volume_name, labels={"type": "local"})
-        # spec = client.V1PersistentVolumeSpec(
-        #     capacity={"storage": "5Gi"}, 
-        #     access_modes=["ReadWriteOnce"], 
-        #     storage_class_name="local-storage",
-        #     volume_mode="Filesystem",
-        #     local={
-        #         "path": path
-        #     },
-        #     node_affinity={
-        #         "required": {
-        #             "nodeSelectorTerms": [
-        #                 {
-        #                     "matchExpressions": [
-        #                         {
-        #                             "key": "kubernetes.io/hostname",
-        #                             "operator": "In",
-        #                             "values": ["minikube"]
-        #                         }
-        #                     ]
-        #                 }
-        #             ]
-        #         }
-        #     })
 
         spec = client.V1PersistentVolumeSpec(
             capacity={"storage": "5Gi"}, 
@@ -102,7 +71,7 @@ class KubeUtil:
         self.v1.create_namespaced_persistent_volume_claim(namespace=self.namespace, body=pvc_body)
         click.echo("Created a volume claim.")
 
-    def create_pod(self, dockerfile_path, username_plain, image_name, project_path):
+    def create_pod(self, username_plain, image_name):
         api_version = "v1"
         kind = "Pod"
         metadata = client.V1ObjectMeta(name=self.pod_name)
@@ -142,10 +111,6 @@ class KubeUtil:
                     "name": self.volume_name,
                     "persistentVolumeClaim":{"claimName": self.volume_claim_name}
                 }
-                # {
-                #     "name": self.volume_name,
-                #     "hostPath":{"path": project_path}
-                # }
             ]
         )
         pod_body = client.V1Pod(api_version=api_version, 
@@ -154,42 +119,30 @@ class KubeUtil:
                                 spec=spec)
         self.v1.create_namespaced_pod(namespace=self.namespace, body=pod_body)
         click.echo("Pod created")
-        
-# items:
-#           - key: .dockerconfigjson
-#             path: config.json
 
     def cleanup(self):
-        # self.clear_namespace()
         try:
             self.v1.delete_namespaced_secret(self.secret_name, self.namespace)
+            click.echo("Deleted the created secret.")
         except:
             click.echo("No secrets deleted, proceeding.")
         
         try:
             self.v1.delete_namespaced_pod(self.pod_name, self.namespace)
+            click.echo("Deleted the created pod.")
         except:
             click.echo("No pods deleted, proceeding.")
 
-        self.clear_volume_and_volume_claims()
+        try:
+            self.v1.delete_namespaced_persistent_volume_claim(namespace=self.namespace, name=self.volume_claim_name)
+            click.echo("Deleted the created volume claim.")
+        except:
+            click.echo("No volume claim deleted, proceeding.")
 
-        click.echo("Completed cleanup, safe to exit.")
-    
-    def clear_volume_and_volume_claims(self):
-        volumes = self.v1.list_persistent_volume()
-        for volume in volumes.items:
-            if volume.metadata.name == self.volume_name:
-                click.echo("Deleting the created volume.")
-                self.v1.delete_persistent_volume(name=self.volume_name)
-        volume_claims = self.v1.list_namespaced_persistent_volume_claim(namespace=self.namespace)
-        for volume_claim in volume_claims.items:
-            if volume_claim.metadata.name == self.volume_claim_name:
-                click.echo("Deleting the created volume claim.")
-                self.v1.delete_namespaced_persistent_volume_claim(namespace=self.namespace, name=self.volume_claim_name)
+        try:
+            self.v1.delete_persistent_volume(name=self.volume_name)
+            click.echo("Deleted the created volume.")
+        except:
+            click.echo("No volume, proceeding.")
 
-    def clear_namespace(self):
-        namespaces = self.v1.list_namespace()
-        for namespace in namespaces.items:
-            if namespace.metadata.name == self.namespace:
-                click.echo("Deleting the created namespace.")
-                self.v1.delete_namespace(name=self.namespace)
+        click.echo("Completed cleanup, safe to exit.")                
