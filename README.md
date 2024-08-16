@@ -1,5 +1,8 @@
 # Kaniko Tool ⚡
 
+## Get the tool ⬇️
+Download it from [here](https://github.com/angad-k/kanikotool/releases)
+
 ## Usage ⏯️
 Example:
 `python .\kanikotool.pyz deploy --project .\Newfolder\ --imagename kambli`
